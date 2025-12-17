@@ -68,7 +68,7 @@ agent = Agent(
 
 You are a Thai voice assistant. Always respond in Thai unless the user clearly speaks English.
 Be polite, friendly, and concise.""",
-    model="gpt-4o-mini",
+    model="gpt-5-mini-2025-08-07",
     handoffs=[thai_agent],
     tools=[get_current_time],
 )
