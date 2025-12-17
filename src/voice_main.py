@@ -135,17 +135,6 @@ def _record_audio(screen: curses.window) -> npt.NDArray[np.float32]:
         screen.addstr(f"📊 Audio: {duration:.1f}s, max amplitude: {max_val:.3f}\n")
         screen.refresh()
         
-        # Save audio for debugging using wave module (built-in)
-        import wave
-        audio_int16 = (audio_data * 32767).astype(np.int16)
-        with wave.open("/tmp/debug_recording.wav", "wb") as wf:
-            wf.setnchannels(1)
-            wf.setsampwidth(2)  # 16-bit
-            wf.setframerate(24000)
-            wf.writeframes(audio_int16.tobytes())
-        screen.addstr("💾 Saved to /tmp/debug_recording.wav\n")
-        screen.refresh()
-        time.sleep(0.5)
     else:
         audio_data = np.empty((0,), dtype=np.float32)
 
