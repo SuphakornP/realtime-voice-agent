@@ -53,8 +53,8 @@ Create a `.env` file with the following variables:
 # Required
 OPENAI_API_KEY=sk-your-api-key-here
 
-# Optional
-VOICE_AGENT_VOICE=nova          # Voice: alloy, echo, fable, onyx, nova, shimmer, ash
+# Optional (for src.main only)
+VOICE_AGENT_VOICE=ash           # Voice: alloy, ash, ballad, coral, echo, sage, shimmer, verse
 VOICE_AGENT_AUDIO_FORMAT=pcm16  # Format: pcm16, g711_ulaw, g711_alaw
 VOICE_AGENT_VAD_TYPE=semantic_vad  # VAD: server_vad, semantic_vad
 VOICE_AGENT_LOG_LEVEL=INFO      # Level: DEBUG, INFO, WARNING, ERROR
@@ -62,19 +62,62 @@ VOICE_AGENT_LOG_LEVEL=INFO      # Level: DEBUG, INFO, WARNING, ERROR
 
 ## Usage
 
-### Start the Voice Agent
+### Start the Voice Agent (Recommended)
+
+Use `voice_main.py` for the best Thai language support with the latest OpenAI models:
+
+```bash
+python -m src.voice_main
+```
+
+**Controls:**
+- Press **SPACEBAR** to start recording
+- Press **SPACEBAR** again to stop and get response
+- Press **'q'** to quit
+
+### Example Session
+
+```
+$ python -m src.voice_main
+
+==================================================
+🎤 Thai/English Voice Agent
+==================================================
+
+Press <SPACEBAR> to start recording.
+Press <SPACEBAR> again to stop and get response.
+Press 'q' to quit.
+
+🔴 Recording... (press SPACEBAR to stop)
+⏹️  Recording stopped. Processing...
+📊 Audio: 2.5s, max amplitude: 0.342
+
+🤔 Thinking...
+🔊 Speaking...
+
+📝 You said: สวัสดีครับ ตอนนี้กี่โมง
+✅ Done
+
+--------------------------------------------------
+
+👋 Goodbye!
+```
+
+### Alternative: Realtime Streaming Mode
+
+For continuous conversation mode (experimental):
 
 ```bash
 python -m src.main
 ```
 
-### Command Line Options
+### Command Line Options (src.main only)
 
 ```bash
 python -m src.main --help
 
 Options:
-  --voice {alloy,echo,fable,onyx,nova,shimmer,ash}
+  --voice {alloy,ash,ballad,coral,echo,sage,shimmer,verse}
                         Voice selection for agent responses
   --log-level {DEBUG,INFO,WARNING,ERROR}
                         Logging level
@@ -89,38 +132,14 @@ Options:
 python -m src.main --list-devices
 ```
 
-### Example Session
-
-```
-$ python -m src.main
-
-==================================================
-🎤 Voice Agent Ready!
-==================================================
-Speak in Thai or English. Press Ctrl+C to exit.
-==================================================
-
-You: สวัสดีครับ
-Agent: สวัสดีค่ะ ยินดีต้อนรับค่ะ มีอะไรให้ช่วยไหมคะ?
-
-You: What time is it?
-Agent: The current time is 3:30 PM.
-
-You: ขอบคุณครับ
-Agent: ยินดีค่ะ มีอะไรให้ช่วยอีกไหมคะ?
-
-^C
-👋 Shutting down...
-✅ Voice agent stopped
-```
-
 ## Project Structure
 
 ```
 realtime-voice-agent/
 ├── src/
 │   ├── __init__.py          # Package metadata
-│   ├── main.py              # Entry point, CLI
+│   ├── voice_main.py        # ⭐ Recommended entry point (VoicePipeline)
+│   ├── main.py              # Alternative entry point (RealtimeRunner)
 │   ├── agent.py             # RealtimeAgent configuration
 │   ├── runner.py            # Session management
 │   ├── audio.py             # Audio I/O handling
@@ -220,7 +239,45 @@ mypy src
 
 MIT
 
+## Technical Details
+
+### voice_main.py Architecture
+
+The recommended `voice_main.py` uses the **VoicePipeline** approach:
+
+| Component | Model | Description |
+|-----------|-------|-------------|
+| **STT** | `gpt-4o-transcribe` | Latest speech-to-text with Thai language hint |
+| **LLM** | `gpt-4o-mini` | Agent response generation |
+| **TTS** | `gpt-4o-mini-tts` | Text-to-speech with "coral" voice |
+
+**Audio Settings:**
+- Sample rate: 48kHz (native) → 24kHz (API)
+- Format: PCM16, mono channel
+- Microphone: MacBook Pro Microphone (device 4)
+
+### Debugging Audio Issues
+
+If transcription is inaccurate:
+
+1. **Check recorded audio:**
+   ```bash
+   afplay /tmp/debug_recording.wav
+   ```
+
+2. **List available microphones:**
+   ```bash
+   python -c "import sounddevice as sd; print(sd.query_devices())"
+   ```
+
+3. **Change microphone in `voice_main.py`:**
+   ```python
+   # Line ~107: Change device number
+   with sd.InputStream(device=4, ...)  # 4 = MacBook Pro Microphone
+   ```
+
 ## References
 
 - [OpenAI Agents SDK Documentation](https://openai.github.io/openai-agents-python/)
 - [Realtime API Guide](https://openai.github.io/openai-agents-python/realtime/guide/)
+- [Voice Pipeline Example](https://github.com/openai/openai-agents-python/blob/main/examples/voice/static/main.py)
