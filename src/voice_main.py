@@ -24,6 +24,9 @@ from agents.voice import (
     SingleAgentVoiceWorkflow,
     SingleAgentWorkflowCallbacks,
     VoicePipeline,
+    VoicePipelineConfig,
+    STTModelSettings,
+    TTSModelSettings,
 )
 
 
@@ -82,6 +85,27 @@ class WorkflowCallbacks(SingleAgentWorkflowCallbacks):
         print(f"\n📝 You said: {transcription}")
 
 
+class AudioStreamPlayer:
+    """Real-time audio player with jitter buffer for smooth playback."""
+    
+    def __init__(self):
+        self.stream = None
+        self.buffer = []
+        
+    def start(self):
+        self.stream = sd.OutputStream(samplerate=24000, channels=1, dtype=np.int16)
+        self.stream.start()
+        
+    def add_audio(self, audio_data: npt.NDArray[np.int16]):
+        if self.stream:
+            self.stream.write(audio_data)
+            
+    def stop(self):
+        if self.stream:
+            self.stream.stop()
+            self.stream.close()
+
+
 def _record_audio(screen: curses.window) -> npt.NDArray[np.float32]:
     """Record audio using curses for keyboard control."""
     screen.nodelay(True)
@@ -123,11 +147,11 @@ def _record_audio(screen: curses.window) -> npt.NDArray[np.float32]:
             time.sleep(0.01)
 
     if audio_buffer:
-        audio_data = np.concatenate(audio_buffer, axis=0)
+        audio_data = np.concatenate(audio_buffer, axis=0).flatten()
         
         # Resample from 48kHz to 24kHz (required by OpenAI API)
         # Simple decimation by factor of 2
-        audio_data = audio_data[::2]
+        audio_data = audio_data[::2].copy()  # .copy() ensures C-contiguous
         
         # Debug: show audio stats
         duration = len(audio_data) / 24000
@@ -163,26 +187,24 @@ class AudioPlayer:
 
 
 async def run_voice_agent():
-    """Run a single voice interaction."""
-    from agents.voice import VoicePipelineConfig, STTModelSettings, TTSModelSettings
-    
-    # Create pipeline with Thai language support via config
-    # Using gpt-4o-transcribe for best accuracy (latest model from OpenAI)
+    """Run a single voice interaction with streaming audio output."""
+    # Create pipeline with Thai language support and optimized streaming
+    # Lower buffer_size = faster TTS start (default is 120, we use 40 for lower latency)
     config = VoicePipelineConfig(
         stt_settings=STTModelSettings(
             language="th",  # Thai language hint for transcription
-            # Note: Don't use prompt as it may interfere with actual transcription
         ),
         tts_settings=TTSModelSettings(
             voice="coral",  # Good voice for Thai
+            buffer_size=40,  # Reduced from 120 for faster streaming (lower latency)
         ),
     )
     
     pipeline = VoicePipeline(
         workflow=SingleAgentVoiceWorkflow(agent, callbacks=WorkflowCallbacks()),
-        stt_model="gpt-4o-transcribe",  # Latest, most accurate STT model
+        stt_model="gpt-4o-transcribe",
         config=config,
-    )   
+    )
 
     # Record audio
     audio_data = record_audio()
@@ -198,20 +220,19 @@ async def run_voice_agent():
     # Run pipeline
     result = await pipeline.run(audio_input)
 
-    # Play response
+    # Stream and play response immediately as chunks arrive
     print("🔊 Speaking...")
     with AudioPlayer() as player:
         async for event in result.stream():
             if event.type == "voice_stream_event_audio":
+                # Play audio chunk immediately (streaming)
                 player.add_audio(event.data)
             elif event.type == "voice_stream_event_lifecycle":
-                if event.event == "turn_started":
-                    pass
-                elif event.event == "turn_ended":
+                if event.event == "turn_ended":
                     print("✅ Done")
 
-        # Add silence at the end to avoid cutoff
-        player.add_audio(np.zeros(24000 * 1, dtype=np.int16))
+        # Add brief silence at the end to avoid cutoff
+        player.add_audio(np.zeros(12000, dtype=np.int16))
     
     return True
 
